@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 
-const { validateToken } = require('./auth')
+const { validateToken, getUserPermissions } = require('./auth')
 
 const app = express();
 
@@ -29,6 +29,7 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE,
     password TEXT,
+    role TEXT DEFAULT 'USER',
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 });
@@ -68,17 +69,20 @@ app.post('/auth/sign-in', (req, res) => {
         return res.status(401).send('Usuário ou senha incorreto.');
       }
 
-
       const isPasswordValid = await bcrypt.compare(password, row.password);
 
       if (!isPasswordValid) {
         return res.status(401).send('Usuário ou senha incorreto.');
       }
 
-      const token = jwt.sign({}, 'my-secret-token', {
-        subject: String(row.id),
-        expiresIn: '60m'
-      })
+      const token = jwt.sign(
+        { role: row.role },
+        'my-secret-token',
+        {
+          subject: String(row.id),
+          expiresIn: '60m'
+        }
+      )
       
       return res.json({ token });
     }
@@ -89,6 +93,12 @@ app.use('*', validateToken);
 
 app.get('/metrics', (req, res) => {
   const { date } = req.query;
+
+  const { cannot } = getUserPermissions(req.user.role)
+
+  if (cannot('list', 'Metrics')) {
+    return res.status(403).send('Acesso negado.');
+  }
 
   const dateFilter = {
     'last-hour': '-60 minutes',
@@ -108,6 +118,12 @@ app.get('/metrics', (req, res) => {
 app.post('/metrics', (req, res) => {
   const { sensor_id, temperature, humidity } = req.body;
 
+  const { cannot } = getUserPermissions(req.user.role)
+
+  if (cannot('create', 'Metrics')) {
+    return res.status(403).send('Acesso negado.');
+  }
+
   db.run(
     `INSERT INTO metrics (sensor_id, temperature, humidity) VALUES (?, ?, ?)`, 
     [sensor_id, temperature, humidity], 
@@ -123,6 +139,12 @@ app.post('/metrics', (req, res) => {
 });
 
 app.delete('/metrics', (_, res) => {
+  const { cannot } = getUserPermissions(req.user.role)
+
+  if (cannot('delete', 'Metrics')) {
+    return res.status(403).send('Acesso negado.');
+  }
+
   db.run(`DELETE FROM metrics`, [], (err) => {
     if (err) {
       console.error('Erro ao limpar dados do banco de dados:', err.message);

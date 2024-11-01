@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const { permissions } = require('./permissions')
+
 function validateToken(req, res, next) {
   const authorization = req.headers['authorization'];
 
@@ -19,7 +21,8 @@ function validateToken(req, res, next) {
     }
 
     req.user = {
-      id: userId
+      id: userId,
+      role: payload.role,
     };
 
     return next();
@@ -28,6 +31,28 @@ function validateToken(req, res, next) {
   }
 }
 
+function getUserPermissions(role) {
+  const builder = {
+    permissions: [],
+    can(action, subject) {
+      this.permissions = this.permissions || [];
+
+      this.permissions.push({ action, subject });
+    },
+    cannot(action, subject) {
+      return !this.permissions.some(permission =>
+        (permission.action === 'manage' || permission.action === action)
+        && permission.subject === subject
+      );
+    },
+  };
+
+  permissions[role](builder);
+  
+  return builder;
+}
+
 module.exports = {
-  validateToken
+  validateToken,
+  getUserPermissions
 }
