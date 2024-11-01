@@ -54,7 +54,7 @@ app.post('/auth/sign-up', async (req, res) => {
 })
 
 app.post('/auth/sign-in', (req, res) => {
-  const { email, password } = req.body
+  const { email, password, role } = req.body
 
   db.get(
     `SELECT * FROM users WHERE email = ?`,
@@ -76,7 +76,7 @@ app.post('/auth/sign-in', (req, res) => {
       }
 
       const token = jwt.sign(
-        { role: row.role },
+        { role },
         'my-secret-token',
         {
           subject: String(row.id),
@@ -85,6 +85,25 @@ app.post('/auth/sign-in', (req, res) => {
       )
       
       return res.json({ token });
+    }
+  );
+});
+
+app.post('/auth/forgot-password', async (req, res) => {
+  const { email, password } = req.body
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  db.run(
+    `UPDATE users SET password = ? WHERE email = ?`,
+    [hashedPassword, email],
+    (err) => {
+      if (err) {
+        console.error('Erro ao atualizar senha no banco de dados:', err.message);
+        return res.status(500).send('Erro ao atualizar senha.');
+      }
+
+      return res.json();
     }
   );
 });
